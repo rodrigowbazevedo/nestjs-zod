@@ -633,7 +633,7 @@ var __spreadValues = (a, b) => {
 };
 var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
 function cleanupOpenApiDoc(doc, { version: versionParam = "auto" } = {}) {
-  var _a, _b;
+  var _a, _b, _c, _d;
   const schemas = {};
   const renames = {};
   const version = versionParam === "auto" ? doc.openapi.startsWith("3.1") ? "3.1" : "3.0" : versionParam;
@@ -699,6 +699,13 @@ function cleanupOpenApiDoc(doc, { version: versionParam = "auto" } = {}) {
             requestBodyObject.schema.$ref = requestBodyObject.schema.$ref.replace(`/${oldSchemaName}`, `/${newSchemaName}`);
           }
         }
+        if (((_b = requestBodyObject.schema) == null ? void 0 : _b.items) && "$ref" in requestBodyObject.schema.items) {
+          const oldSchemaName = getSchemaNameFromRef(requestBodyObject.schema.items.$ref);
+          if (renames[oldSchemaName]) {
+            const newSchemaName = renames[oldSchemaName];
+            requestBodyObject.schema.items.$ref = requestBodyObject.schema.items.$ref.replace(`/${oldSchemaName}`, `/${newSchemaName}`);
+          }
+        }
       }
       for (let statusCodeObject of Object.values((methodObject == null ? void 0 : methodObject.responses) || {})) {
         const content2 = statusCodeObject && "content" in statusCodeObject && statusCodeObject.content || {};
@@ -710,9 +717,16 @@ function cleanupOpenApiDoc(doc, { version: versionParam = "auto" } = {}) {
               responseBodyObject.schema.$ref = responseBodyObject.schema.$ref.replace(`/${oldSchemaName}`, `/${newSchemaName}`);
             }
           }
+          if (((_c = responseBodyObject.schema) == null ? void 0 : _c.items) && "$ref" in responseBodyObject.schema.items) {
+            const oldSchemaName = getSchemaNameFromRef(responseBodyObject.schema.items.$ref);
+            if (renames[oldSchemaName]) {
+              const newSchemaName = renames[oldSchemaName];
+              responseBodyObject.schema.items.$ref = responseBodyObject.schema.items.$ref.replace(`/${oldSchemaName}`, `/${newSchemaName}`);
+            }
+          }
         }
       }
-      if ((_b = methodObject == null ? void 0 : methodObject.parameters) == null ? void 0 : _b.some((parameter) => parameter.name === PREFIX)) {
+      if ((_d = methodObject == null ? void 0 : methodObject.parameters) == null ? void 0 : _d.some((parameter) => parameter.name === PREFIX)) {
         const parameters = [];
         for (let i = 0; i < methodObject.parameters.length; i++) {
           assert(methodObject == null ? void 0 : methodObject.parameters, "parameters is required");
