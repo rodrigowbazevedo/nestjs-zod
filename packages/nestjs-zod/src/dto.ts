@@ -152,8 +152,24 @@ function generateJsonSchema(schema: z3.ZodTypeAny | ($ZodType & { parse: (input:
   const generatedJsonSchema = '_zod' in schema ? toJSONSchema(schema, {
     io,
     override: ({ jsonSchema }) => {
-        if (io === 'output' && 'id' in jsonSchema) {
-            jsonSchema.id = `${jsonSchema.id}_Output`;
+        // zod 4.4+ strips `id` from JSON Schema output (it changes resolution
+        // scope in older dialects). Drive naming from `title` instead — it
+        // survives untouched. Append `_Output` so the downstream cleanup can
+        // collapse symmetric input/output pairs back to a single name.
+        if (io === 'output') {
+            if (
+                typeof jsonSchema.title === 'string' &&
+                !jsonSchema.title.endsWith('_Output')
+            ) {
+                jsonSchema.title = `${jsonSchema.title}_Output`;
+            }
+            // Also mutate `id` (legacy): some consumers still set `meta.id` only.
+            if (
+                typeof jsonSchema.id === 'string' &&
+                !jsonSchema.id.endsWith('_Output')
+            ) {
+                jsonSchema.id = `${jsonSchema.id}_Output`;
+            }
         }
     }
   }) : zodV3ToOpenAPI(schema)
@@ -165,9 +181,9 @@ function generateJsonSchema(schema: z3.ZodTypeAny | ($ZodType & { parse: (input:
   const fixRefs = (schema) => {
     if (schema.$ref && schema.$ref.startsWith('#/$defs/')) {
       const defKey = schema.$ref.replace('#/$defs/', '');
-      const defId = $defs?.[defKey].id;
-      if (defId) {
-        schema.$ref = `#/$defs/${defId}`;
+      const defName = $defs?.[defKey]?.title ?? $defs?.[defKey]?.id;
+      if (defName) {
+        schema.$ref = `#/$defs/${defName}`;
       }
     }
     return schema;
@@ -180,10 +196,11 @@ function generateJsonSchema(schema: z3.ZodTypeAny | ($ZodType & { parse: (input:
   Object.entries($defs || {}).forEach(([defKey, defValue]) => {
     const newDefValue = walkJsonSchema(defValue, fixRefs, { clone: true});
 
-    if (newDefValue.id) {
-      const newKey = newDefValue.id || defKey;
+    const newDefName = newDefValue.title || newDefValue.id;
+    if (newDefName) {
+      const newKey = newDefName;
       if (newDefs[newKey]) {
-        throw new Error(`[nestjs-zod] Duplicate id in $defs: ${newKey}`);
+        throw new Error(`[nestjs-zod] Duplicate schema name in $defs: ${newKey}`);
       }
       newDefs[newKey] = newDefValue;
     } else {

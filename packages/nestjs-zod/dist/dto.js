@@ -335,18 +335,24 @@ function generateJsonSchema(schema, io) {
   const generatedJsonSchema = "_zod" in schema ? core.toJSONSchema(schema, {
     io,
     override: ({ jsonSchema }) => {
-      if (io === "output" && "id" in jsonSchema) {
-        jsonSchema.id = `${jsonSchema.id}_Output`;
+      if (io === "output") {
+        if (typeof jsonSchema.title === "string" && !jsonSchema.title.endsWith("_Output")) {
+          jsonSchema.title = `${jsonSchema.title}_Output`;
+        }
+        if (typeof jsonSchema.id === "string" && !jsonSchema.id.endsWith("_Output")) {
+          jsonSchema.id = `${jsonSchema.id}_Output`;
+        }
       }
     }
   }) : zodV3ToOpenAPI(schema);
   const $defs = "$defs" in generatedJsonSchema && generatedJsonSchema.$defs ? generatedJsonSchema.$defs : void 0;
   const fixRefs = (schema2) => {
+    var _a, _b, _c;
     if (schema2.$ref && schema2.$ref.startsWith("#/$defs/")) {
       const defKey = schema2.$ref.replace("#/$defs/", "");
-      const defId = $defs == null ? void 0 : $defs[defKey].id;
-      if (defId) {
-        schema2.$ref = `#/$defs/${defId}`;
+      const defName = (_c = (_a = $defs == null ? void 0 : $defs[defKey]) == null ? void 0 : _a.title) != null ? _c : (_b = $defs == null ? void 0 : $defs[defKey]) == null ? void 0 : _b.id;
+      if (defName) {
+        schema2.$ref = `#/$defs/${defName}`;
       }
     }
     return schema2;
@@ -355,10 +361,11 @@ function generateJsonSchema(schema, io) {
   const newDefs = {};
   Object.entries($defs || {}).forEach(([defKey, defValue]) => {
     const newDefValue = walkJsonSchema(defValue, fixRefs, { clone: true });
-    if (newDefValue.id) {
-      const newKey = newDefValue.id || defKey;
+    const newDefName = newDefValue.title || newDefValue.id;
+    if (newDefName) {
+      const newKey = newDefName;
       if (newDefs[newKey]) {
-        throw new Error(`[nestjs-zod] Duplicate id in $defs: ${newKey}`);
+        throw new Error(`[nestjs-zod] Duplicate schema name in $defs: ${newKey}`);
       }
       newDefs[newKey] = newDefValue;
     } else {

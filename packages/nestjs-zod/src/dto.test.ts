@@ -1,13 +1,13 @@
 import { createZodDto } from './dto'
 import * as z4 from 'zod/v4'
-import * as z3 from 'zod/v3';
-import * as zodMini from 'zod/v4-mini';
-import { z as nestZod } from '@nest-zod/z';
-import { PREFIX } from './const';
+import * as z3 from 'zod/v3'
+import * as zodMini from 'zod/v4-mini'
+import { z as nestZod } from '@nest-zod/z'
+import { PREFIX } from './const'
 
 describe.each([
   { name: 'zod/v4', z: z4 },
-  { name: 'zod/v3', z: z3 as unknown as typeof z4 }
+  { name: 'zod/v3', z: z3 as unknown as typeof z4 },
 ])('$name', ({ z }) => {
   it('should correctly create DTO', () => {
     const UserSchema = z.object({
@@ -55,20 +55,18 @@ describe.each([
       },
       [PREFIX]: expect.objectContaining({
         type: 'object',
-        required: [
-          'username',
-          'password',
-          'nestedObject',
-        ],
-      })
+        required: ['username', 'password', 'nestedObject'],
+      }),
     })
   })
 
   it('should generate correct OpenAPI metadata for non objects', () => {
-    const UsersSchema = z.array(z.object({
-      username: z.string(),
-      password: z.string(),
-    }))
+    const UsersSchema = z.array(
+      z.object({
+        username: z.string(),
+        password: z.string(),
+      }),
+    )
 
     class UsersDto extends createZodDto(UsersSchema) {}
 
@@ -81,45 +79,54 @@ describe.each([
             username: { type: 'string' },
             password: { type: 'string' },
           },
-          required: [
-            'username',
-            'password',
-          ],
+          required: ['username', 'password'],
         },
-      })
+      }),
     })
   })
 })
 
 describe('zod/v4', () => {
   it('allows creating an Output DTO from a schema', () => {
-    const AddressStatusEnum = z4.enum(['active', 'inactive']).meta({ id: 'AddressStatus' })
+    const AddressStatusEnum = z4
+      .enum(['active', 'inactive'])
+      .meta({ id: 'AddressStatus' })
 
-    const Address = z4.object({
-      address: z4.string(),
-      status: AddressStatusEnum
-    }).meta({ id: 'Address' })
+    const Address = z4
+      .object({
+        address: z4.string(),
+        status: AddressStatusEnum,
+      })
+      .meta({ id: 'Address' })
 
-    const UserSchema = z4.object({
-      username: z4.string(),
-      password: z4.string(),
-      myField: z4.string().optional().default('myField'),
-      address: Address,
-    }).meta({
-      id: 'User',
-      title: 'User',
-    })
+    const UserSchema = z4
+      .object({
+        username: z4.string(),
+        password: z4.string(),
+        myField: z4.string().optional().default('myField'),
+        address: Address,
+      })
+      .meta({
+        title: 'User',
+      })
 
     class UserDto extends createZodDto(UserSchema) {}
 
     expect(UserDto.Output._OPENAPI_METADATA_FACTORY()).toEqual({
       username: expect.objectContaining({ type: 'string', required: true }),
       password: expect.objectContaining({ type: 'string', required: true }),
-      myField: expect.objectContaining({ type: 'string', required: true, default: 'myField' }),
-      address: expect.objectContaining({ type: '', required: true, $ref: '#/$defs/Address_Output' }),
+      myField: expect.objectContaining({
+        type: 'string',
+        required: true,
+        default: 'myField',
+      }),
+      address: expect.objectContaining({
+        type: '',
+        required: true,
+        $ref: '#/$defs/Address_Output',
+      }),
       [PREFIX]: {
-        id: 'User_Output',
-        title: 'User',
+        title: 'User_Output',
         type: 'object',
         additionalProperties: false,
         properties: {
@@ -127,15 +134,10 @@ describe('zod/v4', () => {
           password: { type: 'string' },
           myField: { type: 'string', default: 'myField' },
           address: {
-            $ref: '#/$defs/Address_Output'
-          }
+            $ref: '#/$defs/Address_Output',
+          },
         },
-        required: [
-          'username',
-          'password',
-          'myField',
-          'address',
-        ],
+        required: ['username', 'password', 'myField', 'address'],
         $defs: {
           AddressStatus_Output: {
             type: 'string',
@@ -150,13 +152,10 @@ describe('zod/v4', () => {
               address: { type: 'string' },
               status: { $ref: '#/$defs/AddressStatus_Output' },
             },
-            required: [
-              'address',
-              'status',
-            ]
-          }
-        }
-      }
+            required: ['address', 'status'],
+          },
+        },
+      },
     })
   })
 })
@@ -166,12 +165,14 @@ describe('zod/v3', () => {
     const UserSchema = z3.object({
       username: z3.string(),
       password: z3.string(),
-      myField: z3.string().optional().default('myField')
+      myField: z3.string().optional().default('myField'),
     })
 
     class UserDto extends createZodDto(UserSchema) {}
 
-    expect(() => UserDto.Output).toThrow('[nestjs-zod] Output DTOs can only be created from zod v4 schemas');
+    expect(() => UserDto.Output).toThrow(
+      '[nestjs-zod] Output DTOs can only be created from zod v4 schemas',
+    )
   })
 })
 
@@ -181,42 +182,58 @@ describe.each([
     schema: zodMini.object({
       username: zodMini.string(),
       password: zodMini.string(),
-    })
+    }),
   },
   {
     name: '@nest-zod/z',
     schema: nestZod.object({
       username: nestZod.string(),
       password: nestZod.string(),
-    })
+    }),
   },
   {
-     name: 'just a plain object with a parse method',
-     schema: {
-      parse: (input: unknown): { username: string, password: string } => {
-        if(typeof input === 'object' && input !== null && 'username' in input && 'password' in input && typeof input.username === 'string' && typeof input.password === 'string') {
-          return input as any;
+    name: 'just a plain object with a parse method',
+    schema: {
+      parse: (input: unknown): { username: string; password: string } => {
+        if (
+          typeof input === 'object' &&
+          input !== null &&
+          'username' in input &&
+          'password' in input &&
+          typeof input.username === 'string' &&
+          typeof input.password === 'string'
+        ) {
+          return input as any
         }
 
-        throw new Error('Invalid input');
+        throw new Error('Invalid input')
       },
+    },
+  },
+])(
+  '$name',
+  ({
+    schema,
+  }: {
+    schema: {
+      parse: (input: unknown) => { username: string; password: string }
     }
-  }
-])('$name', ({ schema }: { schema: { parse: (input: unknown) => { username: string, password: string } } }) => {
-  it('parses correctly', () => {
-    class UserDto extends createZodDto(schema) {}
+  }) => {
+    it('parses correctly', () => {
+      class UserDto extends createZodDto(schema) {}
 
-    expect(UserDto.isZodDto).toBe(true)
-    expect(UserDto.schema).toBe(schema)
+      expect(UserDto.isZodDto).toBe(true)
+      expect(UserDto.schema).toBe(schema)
 
-    const user = UserDto.create({
-      username: 'vasya',
-      password: 'strong',
+      const user = UserDto.create({
+        username: 'vasya',
+        password: 'strong',
+      })
+
+      expect(user).toEqual({
+        username: 'vasya',
+        password: 'strong',
+      })
     })
-
-    expect(user).toEqual({
-      username: 'vasya',
-      password: 'strong',
-    })
-  })
-})
+  },
+)

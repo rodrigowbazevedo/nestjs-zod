@@ -408,18 +408,24 @@ function generateJsonSchema(schema, io) {
   const generatedJsonSchema = "_zod" in schema ? core.toJSONSchema(schema, {
     io,
     override: ({ jsonSchema }) => {
-      if (io === "output" && "id" in jsonSchema) {
-        jsonSchema.id = `${jsonSchema.id}_Output`;
+      if (io === "output") {
+        if (typeof jsonSchema.title === "string" && !jsonSchema.title.endsWith("_Output")) {
+          jsonSchema.title = `${jsonSchema.title}_Output`;
+        }
+        if (typeof jsonSchema.id === "string" && !jsonSchema.id.endsWith("_Output")) {
+          jsonSchema.id = `${jsonSchema.id}_Output`;
+        }
       }
     }
   }) : zodV3ToOpenAPI(schema);
   const $defs = "$defs" in generatedJsonSchema && generatedJsonSchema.$defs ? generatedJsonSchema.$defs : void 0;
   const fixRefs = (schema2) => {
+    var _a, _b, _c;
     if (schema2.$ref && schema2.$ref.startsWith("#/$defs/")) {
       const defKey = schema2.$ref.replace("#/$defs/", "");
-      const defId = $defs == null ? void 0 : $defs[defKey].id;
-      if (defId) {
-        schema2.$ref = `#/$defs/${defId}`;
+      const defName = (_c = (_a = $defs == null ? void 0 : $defs[defKey]) == null ? void 0 : _a.title) != null ? _c : (_b = $defs == null ? void 0 : $defs[defKey]) == null ? void 0 : _b.id;
+      if (defName) {
+        schema2.$ref = `#/$defs/${defName}`;
       }
     }
     return schema2;
@@ -428,10 +434,11 @@ function generateJsonSchema(schema, io) {
   const newDefs = {};
   Object.entries($defs || {}).forEach(([defKey, defValue]) => {
     const newDefValue = walkJsonSchema(defValue, fixRefs, { clone: true });
-    if (newDefValue.id) {
-      const newKey = newDefValue.id || defKey;
+    const newDefName = newDefValue.title || newDefValue.id;
+    if (newDefName) {
+      const newKey = newDefName;
       if (newDefs[newKey]) {
-        throw new Error(`[nestjs-zod] Duplicate id in $defs: ${newKey}`);
+        throw new Error(`[nestjs-zod] Duplicate schema name in $defs: ${newKey}`);
       }
       newDefs[newKey] = newDefValue;
     } else {
@@ -633,7 +640,7 @@ var __spreadValues = (a, b) => {
 };
 var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
 function cleanupOpenApiDoc(doc, { version: versionParam = "auto" } = {}) {
-  var _a, _b, _c, _d;
+  var _a, _b, _c, _d, _e;
   const schemas = {};
   const renames = {};
   const version = versionParam === "auto" ? doc.openapi.startsWith("3.1") ? "3.1" : "3.0" : versionParam;
@@ -645,9 +652,11 @@ function cleanupOpenApiDoc(doc, { version: versionParam = "auto" } = {}) {
     let newSchemaName = oldSchemaName;
     let openApiSchema = oldOpenapiSchema.properties[PREFIX];
     const defRenames = {};
-    if (openApiSchema.id) {
-      newSchemaName = openApiSchema.id;
+    const schemaName = (_b = openApiSchema.title) != null ? _b : openApiSchema.id;
+    if (schemaName) {
+      newSchemaName = schemaName;
     }
+    delete openApiSchema.id;
     if (newSchemaName !== oldSchemaName) {
       renames[oldSchemaName] = newSchemaName;
     }
@@ -657,7 +666,7 @@ function cleanupOpenApiDoc(doc, { version: versionParam = "auto" } = {}) {
     if ("$defs" in openApiSchema) {
       const defs = openApiSchema.$defs;
       for (let [defSchemaId, defSchema] of Object.entries(defs)) {
-        if (!("id" in defSchema)) {
+        if (!("title" in defSchema) && !("id" in defSchema)) {
           defRenames[defSchemaId] = `${newSchemaName}${defSchemaId}`;
         }
       }
@@ -665,6 +674,9 @@ function cleanupOpenApiDoc(doc, { version: versionParam = "auto" } = {}) {
         let fixedDef = fixAllRefs({ schema: defSchema, rootSchemaName: newSchemaName, defRenames });
         if (version === "3.0") {
           fixedDef = convertToOpenApi3Point0(fixedDef);
+        }
+        if (fixedDef && typeof fixedDef === "object") {
+          delete fixedDef.id;
         }
         const newDefSchemaKey = defRenames[defSchemaId] || defSchemaId;
         if (schemas[newDefSchemaKey] && !node_util.isDeepStrictEqual(schemas[newDefSchemaKey], fixedDef)) {
@@ -699,7 +711,7 @@ function cleanupOpenApiDoc(doc, { version: versionParam = "auto" } = {}) {
             requestBodyObject.schema.$ref = requestBodyObject.schema.$ref.replace(`/${oldSchemaName}`, `/${newSchemaName}`);
           }
         }
-        if (((_b = requestBodyObject.schema) == null ? void 0 : _b.items) && "$ref" in requestBodyObject.schema.items) {
+        if (((_c = requestBodyObject.schema) == null ? void 0 : _c.items) && "$ref" in requestBodyObject.schema.items) {
           const oldSchemaName = getSchemaNameFromRef(requestBodyObject.schema.items.$ref);
           if (renames[oldSchemaName]) {
             const newSchemaName = renames[oldSchemaName];
@@ -717,7 +729,7 @@ function cleanupOpenApiDoc(doc, { version: versionParam = "auto" } = {}) {
               responseBodyObject.schema.$ref = responseBodyObject.schema.$ref.replace(`/${oldSchemaName}`, `/${newSchemaName}`);
             }
           }
-          if (((_c = responseBodyObject.schema) == null ? void 0 : _c.items) && "$ref" in responseBodyObject.schema.items) {
+          if (((_d = responseBodyObject.schema) == null ? void 0 : _d.items) && "$ref" in responseBodyObject.schema.items) {
             const oldSchemaName = getSchemaNameFromRef(responseBodyObject.schema.items.$ref);
             if (renames[oldSchemaName]) {
               const newSchemaName = renames[oldSchemaName];
@@ -726,7 +738,7 @@ function cleanupOpenApiDoc(doc, { version: versionParam = "auto" } = {}) {
           }
         }
       }
-      if ((_d = methodObject == null ? void 0 : methodObject.parameters) == null ? void 0 : _d.some((parameter) => parameter.name === PREFIX)) {
+      if ((_e = methodObject == null ? void 0 : methodObject.parameters) == null ? void 0 : _e.some((parameter) => parameter.name === PREFIX)) {
         const parameters = [];
         for (let i = 0; i < methodObject.parameters.length; i++) {
           assert(methodObject == null ? void 0 : methodObject.parameters, "parameters is required");
@@ -750,6 +762,9 @@ function cleanupOpenApiDoc(doc, { version: versionParam = "auto" } = {}) {
                 if (version === "3.0") {
                   fixedDef = convertToOpenApi3Point0(fixedDef);
                 }
+                if (fixedDef && typeof fixedDef === "object") {
+                  delete fixedDef.id;
+                }
                 if (schemas[defSchemaId] && !node_util.isDeepStrictEqual(schemas[defSchemaId], fixedDef)) {
                   throw new Error(`[cleanupOpenApiDoc] Found multiple schemas with name \`${defSchemaId}\`.  Please review your schemas to ensure that you are not using the same schema name for different schemas`);
                 }
@@ -765,6 +780,60 @@ function cleanupOpenApiDoc(doc, { version: versionParam = "auto" } = {}) {
         methodObject.parameters = parameters;
       }
     }
+  }
+  const normalizeTitle = (schema) => {
+    if (!schema || typeof schema !== "object") {
+      return schema;
+    }
+    const titled = schema;
+    if (typeof titled.title !== "string" || !titled.title.endsWith("_Output")) {
+      return schema;
+    }
+    return __spreadProps(__spreadValues({}, titled), { title: titled.title.slice(0, -"_Output".length) });
+  };
+  const outputRefRenames = {};
+  for (const key of Object.keys(schemas)) {
+    if (!key.endsWith("_Output")) {
+      continue;
+    }
+    const baseName = key.slice(0, -"_Output".length);
+    const outputSchema = schemas[key];
+    if (!(baseName in schemas)) {
+      schemas[baseName] = outputSchema;
+      delete schemas[key];
+      outputRefRenames[key] = baseName;
+      const titled = outputSchema;
+      if (typeof titled.title === "string" && titled.title.endsWith("_Output")) {
+        titled.title = titled.title.slice(0, -"_Output".length);
+      }
+    } else if (node_util.isDeepStrictEqual(normalizeTitle(schemas[baseName]), normalizeTitle(outputSchema))) {
+      delete schemas[key];
+      outputRefRenames[key] = baseName;
+    }
+  }
+  if (Object.keys(outputRefRenames).length > 0) {
+    const rewriteRefs = (node) => {
+      if (Array.isArray(node)) {
+        for (const item of node)
+          rewriteRefs(item);
+        return;
+      }
+      if (node && typeof node === "object") {
+        const obj = node;
+        if (typeof obj.$ref === "string") {
+          for (const [from, to] of Object.entries(outputRefRenames)) {
+            if (obj.$ref === `#/components/schemas/${from}`) {
+              obj.$ref = `#/components/schemas/${to}`;
+              break;
+            }
+          }
+        }
+        for (const value of Object.values(obj))
+          rewriteRefs(value);
+      }
+    };
+    rewriteRefs(paths);
+    rewriteRefs(schemas);
   }
   return __spreadProps(__spreadValues({}, doc), {
     paths,
