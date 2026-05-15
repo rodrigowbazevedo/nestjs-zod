@@ -41,6 +41,10 @@ type OpenAPIParameter = Exclude<Exclude<Exclude<OpenAPIObject['paths'], undefine
 export function cleanupOpenApiDoc(doc: OpenAPIObject, { version: versionParam = 'auto' }: { version?: '3.1' | '3.0' | 'auto' } = {}): OpenAPIObject {
     const schemas: Record<string, DtoSchema> = {};
     const renames: Record<string, string> = {};
+    // Names of schemas added by class-validator (not through nestjs-zod).
+    // Used to throw on true cross-system name conflicts while tolerating
+    // zod-internal inlining/ref inconsistencies between factories.
+    const classValidatorSchemaNames = new Set<string>();
     const version = versionParam === 'auto' ? (doc.openapi.startsWith('3.1') ? '3.1' : '3.0') : versionParam;
 
     for (let [oldSchemaName, oldOpenapiSchema] of Object.entries(doc.components?.schemas || {})) {
@@ -48,6 +52,7 @@ export function cleanupOpenApiDoc(doc: OpenAPIObject, { version: versionParam = 
         // @ts-expect-error TODO: fix this
         if (!oldOpenapiSchema.properties || !(PREFIX in oldOpenapiSchema.properties)) {
             schemas[oldSchemaName] = oldOpenapiSchema;
+            classValidatorSchemaNames.add(oldSchemaName);
             continue;
         }
 
@@ -107,12 +112,17 @@ export function cleanupOpenApiDoc(doc: OpenAPIObject, { version: versionParam = 
 
                 const newDefSchemaKey = defRenames[defSchemaId] || defSchemaId;
 
-                if (schemas[newDefSchemaKey] && !isDeepStrictEqual(schemas[newDefSchemaKey], fixedDef)) {
+                if (classValidatorSchemaNames.has(newDefSchemaKey)) {
                     throw new Error(`[cleanupOpenApiDoc] Found multiple schemas with name \`${newDefSchemaKey}\`.  Please review your schemas to ensure that you are not using the same schema name for different schemas`);
                 }
-
-                // @ts-ignore TODO: fix this
-                schemas[newDefSchemaKey] = fixedDef;
+                // Tolerate zod-internal collisions: two factories may emit a
+                // $defs entry for the same component name with structurally
+                // different content (one inlined, the other as a $ref to a
+                // previously-promoted schema). Keep the first one we saw.
+                if (!schemas[newDefSchemaKey]) {
+                    // @ts-ignore TODO: fix this
+                    schemas[newDefSchemaKey] = fixedDef;
+                }
             }
 
             delete openApiSchema.$defs
@@ -147,11 +157,12 @@ export function cleanupOpenApiDoc(doc: OpenAPIObject, { version: versionParam = 
             openApiSchema = convertToOpenApi3Point0(openApiSchema);
         }
 
-        if (schemas[newSchemaName] && !isDeepStrictEqual(schemas[newSchemaName], openApiSchema)) {
+        if (classValidatorSchemaNames.has(newSchemaName)) {
             throw new Error(`[cleanupOpenApiDoc] Found multiple schemas with name \`${newSchemaName}\`.  Please review your schemas to ensure that you are not using the same schema name for different schemas`);
         }
-
-        schemas[newSchemaName] = openApiSchema;
+        if (!schemas[newSchemaName]) {
+            schemas[newSchemaName] = openApiSchema;
+        }
     }
 
     // Rename all the references for
@@ -244,12 +255,13 @@ export function cleanupOpenApiDoc(doc: OpenAPIObject, { version: versionParam = 
                                     delete fixedDef.id;
                                 }
 
-                                if (schemas[defSchemaId] && !isDeepStrictEqual(schemas[defSchemaId], fixedDef)) {
+                                if (classValidatorSchemaNames.has(defSchemaId)) {
                                     throw new Error(`[cleanupOpenApiDoc] Found multiple schemas with name \`${defSchemaId}\`.  Please review your schemas to ensure that you are not using the same schema name for different schemas`);
                                 }
-
-                                // @ts-ignore TODO: fix this
-                                schemas[defSchemaId] = fixedDef;
+                                if (!schemas[defSchemaId]) {
+                                    // @ts-ignore TODO: fix this
+                                    schemas[defSchemaId] = fixedDef;
+                                }
                             }
 
                             delete parameter.$defs

@@ -643,10 +643,12 @@ function cleanupOpenApiDoc(doc, { version: versionParam = "auto" } = {}) {
   var _a, _b, _c, _d, _e;
   const schemas = {};
   const renames = {};
+  const classValidatorSchemaNames = /* @__PURE__ */ new Set();
   const version = versionParam === "auto" ? doc.openapi.startsWith("3.1") ? "3.1" : "3.0" : versionParam;
   for (let [oldSchemaName, oldOpenapiSchema] of Object.entries(((_a = doc.components) == null ? void 0 : _a.schemas) || {})) {
     if (!oldOpenapiSchema.properties || !(PREFIX in oldOpenapiSchema.properties)) {
       schemas[oldSchemaName] = oldOpenapiSchema;
+      classValidatorSchemaNames.add(oldSchemaName);
       continue;
     }
     let newSchemaName = oldSchemaName;
@@ -679,10 +681,12 @@ function cleanupOpenApiDoc(doc, { version: versionParam = "auto" } = {}) {
           delete fixedDef.id;
         }
         const newDefSchemaKey = defRenames[defSchemaId] || defSchemaId;
-        if (schemas[newDefSchemaKey] && !node_util.isDeepStrictEqual(schemas[newDefSchemaKey], fixedDef)) {
+        if (classValidatorSchemaNames.has(newDefSchemaKey)) {
           throw new Error(`[cleanupOpenApiDoc] Found multiple schemas with name \`${newDefSchemaKey}\`.  Please review your schemas to ensure that you are not using the same schema name for different schemas`);
         }
-        schemas[newDefSchemaKey] = fixedDef;
+        if (!schemas[newDefSchemaKey]) {
+          schemas[newDefSchemaKey] = fixedDef;
+        }
       }
       delete openApiSchema.$defs;
     }
@@ -694,10 +698,12 @@ function cleanupOpenApiDoc(doc, { version: versionParam = "auto" } = {}) {
     if (version === "3.0") {
       openApiSchema = convertToOpenApi3Point0(openApiSchema);
     }
-    if (schemas[newSchemaName] && !node_util.isDeepStrictEqual(schemas[newSchemaName], openApiSchema)) {
+    if (classValidatorSchemaNames.has(newSchemaName)) {
       throw new Error(`[cleanupOpenApiDoc] Found multiple schemas with name \`${newSchemaName}\`.  Please review your schemas to ensure that you are not using the same schema name for different schemas`);
     }
-    schemas[newSchemaName] = openApiSchema;
+    if (!schemas[newSchemaName]) {
+      schemas[newSchemaName] = openApiSchema;
+    }
   }
   const paths = deepmerge__default["default"](doc.paths, {});
   for (let { get, patch, post, delete: del, put, head } of Object.values(paths)) {
@@ -765,10 +771,12 @@ function cleanupOpenApiDoc(doc, { version: versionParam = "auto" } = {}) {
                 if (fixedDef && typeof fixedDef === "object") {
                   delete fixedDef.id;
                 }
-                if (schemas[defSchemaId] && !node_util.isDeepStrictEqual(schemas[defSchemaId], fixedDef)) {
+                if (classValidatorSchemaNames.has(defSchemaId)) {
                   throw new Error(`[cleanupOpenApiDoc] Found multiple schemas with name \`${defSchemaId}\`.  Please review your schemas to ensure that you are not using the same schema name for different schemas`);
                 }
-                schemas[defSchemaId] = fixedDef;
+                if (!schemas[defSchemaId]) {
+                  schemas[defSchemaId] = fixedDef;
+                }
               }
               delete parameter.$defs;
             }
